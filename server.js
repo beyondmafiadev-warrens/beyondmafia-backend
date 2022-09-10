@@ -104,12 +104,12 @@ async function getGames(db,page,bmcookie,callback){
       left = page-1 * 10;
       right = page * 10;
     }
-    var res = await db.query("SELECT * FROM mafiadata.games ORDER BY gameId DESC LIMIT ?,?",[left,right]);
+      var res = await db.query("SELECT * FROM mafiadata.games ORDER BY gameId DESC LIMIT ?,?",[left,right]);
     gameArray = [];
     var gamePromise = res[0].map(async(games) => {
-      var res = await db.query("SELECT COUNT(*) FROM(SELECT mafiadata.gameplayers.uuid FROM mafiadata.games JOIN mafiadata.gamePlayers WHERE gameplayers.gameId = games.gameId AND games.gameId = ?) as subquery",[games.gameId])
-      var secondRes = await db.query("SELECT * FROM mafiadata.gameroles WHERE gameid = ?",[games.gameId]);
-      var roles = []
+      var res = await db.query("SELECT COUNT(*) FROM(SELECT mafiadata.gameplayers.uuid FROM mafiadata.games JOIN mafiadata.gameplayers WHERE gameplayers.gameId = games.gameId AND games.gameId = ?) as subquery",[games.gameId])
+      var secondRes = await db.query("SELECT * FROM mafiadata.gameRoles WHERE gameId = ?",[games.gameId]);
+	var roles = []
       var promises = secondRes[0].map((item)=>{
         roles.push(item['roleConfig']);
       })
@@ -128,7 +128,7 @@ await verifyUser(bmcookie,db,async(ret)=>{
 FROM mafiadata.games AS g, mafiadata.playersocket AS ps
 WHERE g.gameId = ps.gameId
 LIMIT 1`);
-var secondRes = await db.query("SELECT * FROM mafiadata.gameroles WHERE gameid = ?",[currentGame[0][0]['gameId']]);
+var secondRes = await db.query("SELECT * FROM mafiadata.gameRoles WHERE gameId = ?",[currentGame[0][0]['gameId']]);
 var roles = []
 promises = secondRes[0].map((item)=>{
   roles.push(item['roleConfig']);
@@ -204,10 +204,11 @@ async function verifyUser(cookie,db,callback){
 }
 
 (async function(){
-app.use(cors())
+    
+    app.use(cors({origin:true,credentials: true}))
 app.use(cookieParser());
 app.use(express.json());
-
+    app.options('*',cors());
 var db = await database.getDatabase();
 app.post('/users/register', async(req, res)=>{
     const username = req.body.username;
@@ -248,7 +249,7 @@ app.post('/getUser', async(req,res)=>{
 })
 
 app.get('/verifyUser', async(req,res)=>{
-var resJson = {};
+    var resJson = {};
 await verifyUser(req.headers.bmcookie, db, (ret)=>{
   if(ret.cmd === -1){
   return res.status(401).json(resJson);
@@ -273,7 +274,7 @@ app.post('/getGames',async(req,res)=>{
 });
 
 app.post('/createGame',  async (req,res)=>{
-spawn('beyondmafia-engine-sockets.exe');
+spawn('./engine');
 try{
   var promise = new Promise(async(resolve,reject)=>{
   await createGameQuery(req.body,db,async(callback)=>{
@@ -398,7 +399,7 @@ app.get('/getSocket', async(req,res)=>{
     }
 })
 });
-app.listen(3001, () =>{
+    app.listen('3001', '0.0.0.0' ,() =>{
     console.log("Server is listening on PORT: 3001")
 });
 })();
