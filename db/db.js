@@ -2,9 +2,9 @@ const mysql = require('mysql2/promise');
 
 
 async function initalizationQuery(con){
-var createSchema = `CREATE SCHEMA IF NOT EXISTS mafiaData`
+var createSchema = `CREATE SCHEMA IF NOT EXISTS mafiadata`
 await con.execute(createSchema);
-var createUserTable = `CREATE TABLE IF NOT EXISTS mafiaData.userTable(
+var createUserTable = `CREATE TABLE IF NOT EXISTS mafiadata.usertable(
   playerid INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(28) NOT NULL,
   passwordhash VARCHAR(256) NOT NULL,
@@ -16,7 +16,7 @@ var createUserTable = `CREATE TABLE IF NOT EXISTS mafiaData.userTable(
   UNIQUE(username))
   `
 await con.execute(createUserTable);
-var createGamesTable =  `CREATE TABLE IF NOT EXISTS mafiaData.Games
+var createGamesTable =  `CREATE TABLE IF NOT EXISTS mafiadata.games
 (gameId int AUTO_INCREMENT PRIMARY KEY,
 port int,
 maxPlayers int,
@@ -26,19 +26,19 @@ startedGame bool,
 gameEnded bool
 )`
 con.execute(createGamesTable)
-var createGamePlayersTable =  `CREATE TABLE IF NOT EXISTS mafiaData.gamePlayers
+var createGamePlayersTable =  `CREATE TABLE IF NOT EXISTS mafiadata.gameplayers
 (gameId int unsigned,
 uuid int
 )`
 con.execute(createGamePlayersTable)
 var createGameRolesTable = `
-CREATE TABLE IF NOT EXISTS mafiaData.gameRoles
+CREATE TABLE IF NOT EXISTS mafiadata.gameRoles
 (gameId int,
 roleConfig  int unsigned
 )`
 con.execute(createGameRolesTable)
 var createGameQueue = `
-CREATE TABLE IF NOT EXISTS mafiaData.gameTableQueue  (port INT)`
+CREATE TABLE IF NOT EXISTS mafiadata.gametablequeue  (port INT)`
 con.execute(createGameQueue)
 var playerSocket = `CREATE TABLE IF NOT EXISTS mafiadata.playersocket
 (gameId int,
@@ -52,8 +52,8 @@ async function getDatabase(){
 var con = await mysql.createConnection({
     host: "127.0.0.1",
 	port: "3306",
-    user: "anthony",
-    password: "Sababa2094!"
+    user: "ENTER USERNAME",
+    password: "ENTER PASSWORD"
   });
   await initalizationQuery(con);
   return con;
