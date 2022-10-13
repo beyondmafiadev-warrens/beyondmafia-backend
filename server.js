@@ -84,7 +84,6 @@ var date = new Date();
 
 async function getUser(id,db,callback){
     try{
-
 	var res = await db.query("SELECT username, bio,wins,losses,desertions,points,gems FROM mafiadata.usertable WHERE playerid = ? LIMIT 1",[id]);
   var writeUsername = res[0][0]['username'];
       var bio = res[0][0]['bio'];
@@ -121,7 +120,7 @@ async function getGames(db,page,bmcookie,callback){
         roles.push(item['roleConfig']);
       })
       await Promise.all(promises);
-      gameArray.push({gameId:games.gameId,maxPlayers:games.maxPlayers,currentPlayers:res[0][0]['COUNT(*)'],roles:roles});
+      gameArray.push({gameId:games.gameId,state:games.state,startedGame:games.startedGame,gameEnded:games.gameEnded,lockedGame:games.lockedGame,rankedGame:games.lockedGame,maxPlayers:games.maxPlayers,currentPlayers:res[0][0]['COUNT(*)'],roles:roles});
 })
 await Promise.all(gamePromise);
 await verifyUser(bmcookie,db,async(ret)=>{
@@ -158,8 +157,35 @@ await Promise.all(promises);
           callback({cmd:-1});
   }
 }
-
-
+async function checkSetup(db,roles,settings){
+  return new Promise(async(res,rej)=>{
+        var sortedRoles = roles.sort((a,b)=>{
+          if(a % 2 === 1 && b % 2 !== 1){
+            return 1;
+          }
+          else if(b % 2 === 1 && a % 2 !== 1){
+            return -1;
+          }
+          else if(a < b){
+            return -1;
+          }
+          else if(a > b){
+            return 1;
+          }
+          return 0;
+        });
+        var dbRes = await db.query("SELECT COUNT(*) FROM(SELECT * FROM mafiadata.setups where setup=JSON_ARRAY(?)) as subquery;",[sortedRoles]);
+        if(dbRes[0][0]['COUNT(*)'] === 0){
+            await db.query("INSERT INTO `mafiadata`.`setups` (`setup`) VALUES (JSON_ARRAY(?));",[sortedRoles])
+            dbRes = await db.query("SELECT LAST_INSERT_ID() AS id");
+            res(dbRes[0][0]['id']);
+        }
+        else{
+           dbRes = await db.query("SELECT * FROM mafiadata.setups where setup=JSON_ARRAY(?);",[sortedRoles]);
+           res(dbRes[0][0]['setupId']);
+        }
+  });
+}
 async function createGameQuery(body,db,callback){
     var dbRes = await db.query("SELECT COUNT(*) FROM(SELECT * FROM mafiadata.gametablequeue as ports) as subquery");
     var wait = new Promise(
@@ -170,28 +196,30 @@ async function createGameQuery(body,db,callback){
 	    resolve()
 	});
     await wait;
-    var dbRes = await db.query("SELECT PORT FROM mafiadata.gametablequeue LIMIT 1;");
+  	dbRes = await db.query("SELECT * FROM mafiadata.gametablequeue as ports");
+  	dbRes = await db.query("SELECT PORT FROM mafiadata.gametablequeue LIMIT 1;");
     var port = dbRes[0][0].PORT
-    await db.query("DELETE FROM mafiadata.gametablequeue WHERE port = ?",[port]);
     var s = net.Socket();
     s.connect(port, "127.0.0.1");
     var socketConnection = new Promise((resolve,reject)=>{
-	s.on('connect', ()=>{
+	s.on('connect',async ()=>{
 	var buffer = Buffer.alloc(256).fill('\0');
+	 var setupId = await checkSetup(db,body.roles,body.settings);
 	var game = {
 	    cmd: 0,
-	    roles:body.roles,
+	    setupId: setupId,
 	    settings:body.settings
 	}
 	buffer.write(JSON.stringify(game))    
 	s.write(buffer,async (err,data)=>{
 	    s.destroy();
-	    resolve();
+	   await db.query("DELETE FROM mafiadata.gametablequeue WHERE port = ?",[port]);
 	});
     })
     });
     await socketConnection;
     callback({cmd:1})
+
 }
 
 async function verifyUser(cookie,db,callback){
@@ -214,7 +242,6 @@ async function verifyUser(cookie,db,callback){
     app.use(cookieParser());
     app.use(express.json());
     var db = await database.getDatabase();
-    await database.init(db); 
     app.post('/users/register', async(req, res)=>{
     const username = req.body.username;
     const password = req.body.password;
@@ -423,7 +450,7 @@ app.get('/getSocket', async(req,res)=>{
     }
 })
 });
-    app.listen('3001', '0.0.0.0' ,() =>{
+    app.listen('3001', '127.0.0.1' ,() =>{
     console.log("Server is listening on PORT: 3001")
 });
 })();
