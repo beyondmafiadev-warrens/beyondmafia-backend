@@ -8,6 +8,7 @@ const userRouter = require('./routes/users');
 const net = require('net');
 const {spawn} = require('child_process');
 var cookieParser = require('cookie-parser');
+var  compression = require('compression');
 
 async function insertPlayer(username,password,email,db,callback){
   var returnCode = 0;
@@ -82,11 +83,17 @@ var date = new Date();
 }
 
 async function getUser(id,db,callback){
-  try{
-  var res = await db.query("SELECT username, bio FROM mafiadata.usertable WHERE playerid = ? LIMIT 1",[id]);
+    try{
+
+	var res = await db.query("SELECT username, bio,wins,losses,desertions,points,gems FROM mafiadata.usertable WHERE playerid = ? LIMIT 1",[id]);
   var writeUsername = res[0][0]['username'];
-  var bio = res[0][0]['bio'];
-  callback({cmd:1,username:writeUsername,bio:bio});
+      var bio = res[0][0]['bio'];
+      var wins = res[0][0]['wins'];
+      var losses = res[0][0]['losses'];
+      var desertions = res[0][0]['desertions'];
+      var points = res[0][0]['points'];
+      var gems = res[0][0]['gems'];
+      callback({cmd:1,username:writeUsername,bio:bio,wins:wins,losses:losses,desertions:desertions,points:points,gems:gems});
 }
 catch(e){
   callback({cmd:-1})
@@ -152,43 +159,41 @@ await Promise.all(promises);
   }
 }
 
+
 async function createGameQuery(body,db,callback){
-  try{
     var dbRes = await db.query("SELECT COUNT(*) FROM(SELECT * FROM mafiadata.gametablequeue as ports) as subquery");
     var wait = new Promise(
-      async (resolve,reject)=>{
-      while(dbRes[0][0]['COUNT(*)'] === 0){
-      dbRes = await db.query("SELECT COUNT(*) FROM(SELECT * FROM mafiadata.gametablequeue as ports) as subquery");
-    }
-    resolve()
-  });
-  await wait;
-  dbRes = await db.query("SELECT * FROM mafiadata.gametablequeue as ports");
-  await db.query("LOCK TABLE mafiadata.gametablequeue WRITE")
-  dbRes = await db.query("SELECT PORT FROM mafiadata.gametablequeue LIMIT 1;");
-  var port = dbRes[0][0].PORT
-  var s = net.Socket();
-  s.connect(port, "127.0.0.1");
-  s.on('connect', ()=>{
-    var buffer = Buffer.alloc(256).fill('\0');
-    var game = {
-      cmd: 0,
-      roles:body.roles,
-      settings:body.settings
-    }
-    buffer.write(JSON.stringify(game))
-    s.write(buffer,async (err,data)=>{
-      s.destroy();
-      await db.query("DELETE FROM mafiadata.gametablequeue WHERE port = ?",[port]);
-      await db.query("UNLOCK TABLES")
+	async (resolve,reject)=>{
+	    while(dbRes[0][0]['COUNT(*)'] === 0){
+		dbRes = await db.query("SELECT COUNT(*) FROM(SELECT * FROM mafiadata.gametablequeue as ports) as subquery");
+	    }
+	    resolve()
+	});
+    await wait;
+    var dbRes = await db.query("SELECT PORT FROM mafiadata.gametablequeue LIMIT 1;");
+    var port = dbRes[0][0].PORT
+    await db.query("DELETE FROM mafiadata.gametablequeue WHERE port = ?",[port]);
+    var s = net.Socket();
+    s.connect(port, "127.0.0.1");
+    var socketConnection = new Promise((resolve,reject)=>{
+	s.on('connect', ()=>{
+	var buffer = Buffer.alloc(256).fill('\0');
+	var game = {
+	    cmd: 0,
+	    roles:body.roles,
+	    settings:body.settings
+	}
+	buffer.write(JSON.stringify(game))    
+	s.write(buffer,async (err,data)=>{
+	    s.destroy();
+	    resolve();
+	});
     })
-})
+    });
+    await socketConnection;
+    callback({cmd:1})
 }
-catch(e){
-  return callback({cmd:-1})
-}
-return callback({cmd:1});
-}
+
 async function verifyUser(cookie,db,callback){
   try{
     if(cookie.length < 5){
@@ -204,13 +209,13 @@ async function verifyUser(cookie,db,callback){
 }
 
 (async function(){
-    
-    app.use(cors({origin:true,credentials: true}))
-app.use(cookieParser());
-app.use(express.json());
-    app.options('*',cors());
-var db = await database.getDatabase();
-app.post('/users/register', async(req, res)=>{
+    app.use(compression());
+    app.use(cors({origin:"https://www.beyondmafia.live/"}))
+    app.use(cookieParser());
+    app.use(express.json());
+    var db = await database.getDatabase();
+    await database.init(db); 
+    app.post('/users/register', async(req, res)=>{
     const username = req.body.username;
     const password = req.body.password;
     const email = req.body.email;
@@ -242,7 +247,12 @@ app.post('/getUser', async(req,res)=>{
   else{
     resJson['0'] = 1;
     resJson['username'] = ret.username;
-    resJson['bio'] = ret.bio;
+      resJson['bio'] = ret.bio;
+      resJson['wins'] = ret.wins;
+      resJson['losses'] = ret.losses;
+      resJson['desertions'] = ret.desertions;
+      resJson['points'] = ret.points;
+      resJson['gems'] = ret.gems;
     return res.status(200).json(resJson);
   }
   })
@@ -273,33 +283,36 @@ app.post('/getGames',async(req,res)=>{
   })
 });
 
-app.post('/createGame',  async (req,res)=>{
-spawn('./engine');
-try{
-  var promise = new Promise(async(resolve,reject)=>{
-  await createGameQuery(req.body,db,async(callback)=>{
-    if(callback.cmd === -1){
-      res.status(401).json(callback);
-      resolve()
+    
+    app.post('/createGame',  async (req,res)=>{
+	spawn('./engine');
+	try{
+	var promise = new Promise(async(resolve,reject)=>{
+	    createGameQuery(req.body,db,async(callback)=>{
+		if(callback.cmd === -1){
+		    res.status(401).json(callback);
+		    resolve()
+		}
+		else{
+		    res.status(200).json(callback);
+		    resolve();
+		}
+	    });
+	})
+	await promise;
     }
-    else{
-      res.status(200).json(callback);
-      resolve();
+    catch(e){
+	res.status(401)
     }
-  });
 })
-await promise;
-}
-catch(e){
-  res.status(401)
-}
-  })
 
-app.post('/joinGame', async (req,res)=>{
+    app.post('/joinGame', async (req,res)=>{
+	try{
   var dbRes = await db.query("SELECT PORT FROM mafiadata.games WHERE gameId = ?",[req.body.gameId]);
   var port = dbRes[0][0].PORT
   var s = net.Socket();
-  s.connect(port, "127.0.0.1");
+	    s.connect(port, "127.0.0.1");
+	    s.on('error', async(err) =>{ return res.status(401)})
   s.on('connect', async ()=>{
       var buffer = Buffer.alloc(256).fill('\0');
       await verifyUser(req.headers.bmcookie,db,async(ret)=>{
@@ -332,8 +345,13 @@ app.post('/joinGame', async (req,res)=>{
           });
         }
       })
-});
+  });
+	}
+	catch(e){
+	    res.status(401).json({cmd:-1});
+	}
 })
+    
 app.post('/users/login', async(req,res)=>{
   await comparePassword(req.body.username,req.body.password,db,async(ret)=>{
     if(ret.cmd === -1){
@@ -348,7 +366,8 @@ app.post('/users/login', async(req,res)=>{
   });
 });
 
-app.post('/leaveGame', async(req,res)=>{
+    app.post('/leaveGame', async(req,res)=>{
+	try{
   await verifyUser(req.headers.bmcookie,db,async(ret)=>{
     if(ret.cmd === -1){
       return res.status(401).json(ret);
@@ -358,7 +377,8 @@ app.post('/leaveGame', async(req,res)=>{
         var dbRes = await db.query("SELECT PORT FROM mafiadata.games WHERE gameId = ?",[req.body.gameId]);
         var port = dbRes[0][0].PORT
         var s = net.Socket();
-        s.connect(port, "127.0.0.1");
+          s.connect(port, "127.0.0.1");
+	  s.on('error', async(err) => {return res.status(401)})
         s.on('connect', async ()=>{
             var buffer = Buffer.alloc(256).fill('\0');
             var check = await db.query("SELECT COUNT(*) FROM(SELECT * FROM mafiadata.playersocket as websocket WHERE uuid = ?) as subquery",[ret.playerid]);
@@ -386,7 +406,11 @@ app.post('/leaveGame', async(req,res)=>{
         return res.status(401);
       }
     }
-})
+  })
+	}
+	catch(e){
+	    return res.status(401);
+	}
 })
 app.get('/getSocket', async(req,res)=>{
   await verifyUser(req.headers.bmcookie,db,async(ret)=>{
