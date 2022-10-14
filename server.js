@@ -384,7 +384,7 @@ app.post('/users/login', async(req,res)=>{
   try{
   if(!req.body.username || !req.body.password || req.body.username.length < 3 || req.body.password.length < 3){
     return res.status(401);
-  }
+  }else{
   await comparePassword(req.body.username,req.body.password,db,async(ret)=>{
     if(ret.cmd === -1){
       return res.status(401);
@@ -396,6 +396,7 @@ app.post('/users/login', async(req,res)=>{
       return res.status(200).json(resJson);
     }
   });
+}
 }
 catch(e){
       return res.status(401);
