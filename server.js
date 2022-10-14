@@ -201,7 +201,6 @@ async function createGameQuery(body,db,callback){
     var port = dbRes[0][0].PORT
     var s = net.Socket();
     s.connect(port, "127.0.0.1");
-    var socketConnection = new Promise((resolve,reject)=>{
 	s.on('connect',async ()=>{
 	var buffer = Buffer.alloc(256).fill('\0');
 	 var setupId = await checkSetup(db,body.roles,body.settings);
@@ -210,16 +209,13 @@ async function createGameQuery(body,db,callback){
 	    setupId: setupId,
 	    settings:body.settings
 	}
-	buffer.write(JSON.stringify(game))    
+	buffer.write(JSON.stringify(game))
 	s.write(buffer,async (err,data)=>{
 	    s.destroy();
 	   await db.query("DELETE FROM mafiadata.gametablequeue WHERE port = ?",[port]);
 	});
-    })
-    });
-    await socketConnection;
-    callback({cmd:1})
-
+})
+callback({cmd:1})
 }
 
 async function verifyUser(cookie,db,callback){
@@ -229,7 +225,12 @@ async function verifyUser(cookie,db,callback){
     }
     var res = await db.query("SELECT playerid FROM mafiadata.usertable WHERE cookie = ? LIMIT 1",[cookie]);
     var playerid = res[0][0]['playerid']
+    if(playerid){
     callback({cmd:1,playerid:playerid});
+  }
+  else{
+    callback({cmd:-1});
+  }
   }
   catch(e){
     callback({cmd:-1})
@@ -287,7 +288,7 @@ app.post('/getUser', async(req,res)=>{
 
 app.get('/verifyUser', async(req,res)=>{
     var resJson = {};
-await verifyUser(req.headers.bmcookie, db, (ret)=>{
+await verifyUser(req.cookies.bmcookie, db, (ret)=>{
   if(ret.cmd === -1){
   return res.status(401).json(resJson);
 }
@@ -300,7 +301,7 @@ else{
 })
 
 app.post('/getGames',async(req,res)=>{
-  getGames(db,req.body.page,req.headers.bmcookie,(callback)=>{
+  getGames(db,req.body.page,req.cookies.bmcookie,(callback)=>{
     if(callback.cmd === -1){
       return res.status(401).json(callback);
     }
@@ -310,7 +311,7 @@ app.post('/getGames',async(req,res)=>{
   })
 });
 
-    
+
     app.post('/createGame',  async (req,res)=>{
 	spawn('./engine');
 	try{
@@ -342,7 +343,7 @@ app.post('/getGames',async(req,res)=>{
 	    s.on('error', async(err) =>{ return res.status(401)})
   s.on('connect', async ()=>{
       var buffer = Buffer.alloc(256).fill('\0');
-      await verifyUser(req.headers.bmcookie,db,async(ret)=>{
+      await verifyUser(req.cookies.bmcookie,db,async(ret)=>{
         if(ret.cmd === -1){
           return res.status(401).json(ret);
         }
@@ -378,8 +379,11 @@ app.post('/getGames',async(req,res)=>{
 	    res.status(401).json({cmd:-1});
 	}
 })
-    
+
 app.post('/users/login', async(req,res)=>{
+  if(req.body.username.length < 3 || req.body.password.length < 3){
+    return res.status(401);
+  }
   await comparePassword(req.body.username,req.body.password,db,async(ret)=>{
     if(ret.cmd === -1){
       return res.status(401);
@@ -395,7 +399,7 @@ app.post('/users/login', async(req,res)=>{
 
     app.post('/leaveGame', async(req,res)=>{
 	try{
-  await verifyUser(req.headers.bmcookie,db,async(ret)=>{
+  await verifyUser(req.cookies.bmcookie,db,async(ret)=>{
     if(ret.cmd === -1){
       return res.status(401).json(ret);
     }
@@ -440,7 +444,7 @@ app.post('/users/login', async(req,res)=>{
 	}
 })
 app.get('/getSocket', async(req,res)=>{
-  await verifyUser(req.headers.bmcookie,db,async(ret)=>{
+  await verifyUser(req.cookies.bmcookie,db,async(ret)=>{
     if(ret.cmd === -1){
       return res.status(401).json(ret);
     }
