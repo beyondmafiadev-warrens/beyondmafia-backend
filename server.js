@@ -382,7 +382,7 @@ app.post('/getGames',async(req,res)=>{
 
 app.post('/users/login', async(req,res)=>{
   try{
-  if(req.body.username.length < 3 || req.body.password.length < 3){
+  if(!req.body.username || !req.body.password || req.body.username.length < 3 || req.body.password.length < 3){
     return res.status(401);
   }
   await comparePassword(req.body.username,req.body.password,db,async(ret)=>{
