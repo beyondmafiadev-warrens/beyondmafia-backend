@@ -75,6 +75,9 @@ var date = new Date();
         if(innerRes[0]['affectedRows'] === 1){
           callback({cmd:1,cookie:hash})
         }
+        else{
+          callback({cmd:-1})
+        }
       }
       catch(e){
           callback({cmd:-1})
@@ -330,7 +333,7 @@ app.post('/getGames',async(req,res)=>{
 	await promise;
     }
     catch(e){
-	res.status(401)
+	res.status(401).json({cmd:-1})
     }
 })
 
@@ -383,11 +386,12 @@ app.post('/getGames',async(req,res)=>{
 app.post('/users/login', async(req,res)=>{
   try{
   if(!req.body.username || !req.body.password || req.body.username.length < 3 || req.body.password.length < 3){
-    return res.status(401);
-  }else{
+    return res.status(401).json({cmd:-1});
+  }
+  else{
   await comparePassword(req.body.username,req.body.password,db,async(ret)=>{
     if(ret.cmd === -1){
-      return res.status(401);
+      return res.status(401).json({cmd:-1});
     }
     else{
       var resJson = {};
@@ -399,7 +403,7 @@ app.post('/users/login', async(req,res)=>{
 }
 }
 catch(e){
-      return res.status(401);
+      return res.status(401).json({cmd:-1});
 }
 });
 
@@ -427,7 +431,7 @@ catch(e){
               buffer.write(JSON.stringify(cmd));
               s.write(buffer,async (err,data)=>{
                 if(err){
-                  return res.status(401);
+                  return res.status(401).json({cmd:-1});
                 }
                 else{
                   return res.status(200).json({cmd:1});
@@ -435,18 +439,18 @@ catch(e){
               });
             }
             else{
-              return res.status(401);
+              return res.status(401).json({cmd:-1});
             }
           });
       }
       else{
-        return res.status(401);
+        return res.status(401).json({cmd:-1});
       }
     }
   })
 	}
 	catch(e){
-	    return res.status(401);
+	    return res.status(401).json({cmd:-1});
 	}
 })
 app.get('/getSocket', async(req,res)=>{
